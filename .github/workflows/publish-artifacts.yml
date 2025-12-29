@@ -5,11 +5,19 @@ on:
 
 jobs:
   docker-images:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build images
+      - name: Build images (native ${{ matrix.arch }})
         run: |
           CVAT_VERSION=latest CLAM_AV=yes docker compose -f docker-compose.yml -f docker-compose.dev.yml build
 
@@ -19,19 +27,66 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push to Docker Hub
+      - name: Push per-arch tags to Docker Hub
         env:
           DOCKERHUB_WORKSPACE: ${{ secrets.DOCKERHUB_WORKSPACE }}
           SERVER_IMAGE_REPO: 'server'
           UI_IMAGE_REPO: 'ui'
+          TAG: ${{ github.event.release.tag_name }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          docker tag "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${{ github.event.release.tag_name }}"
-          docker push "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${{ github.event.release.tag_name }}"
-          docker push "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest"
+          # Tag per-arch images (assuming local images are tagged as ${DOCKERHUB_WORKSPACE}/<repo>:latest)
+          docker tag "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-${ARCH}"
+          docker tag "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}-${ARCH}"
 
-          docker tag "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${{ github.event.release.tag_name }}"
-          docker push "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${{ github.event.release.tag_name }}"
-          docker push "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest"
+          docker tag "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest-${ARCH}"
+          docker tag "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}-${ARCH}"
+
+          # Push per-arch tags
+          docker push "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-${ARCH}"
+          docker push "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}-${ARCH}"
+
+          docker push "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest-${ARCH}"
+          docker push "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}-${ARCH}"
+
+  manifests:
+    runs-on: ubuntu-latest
+    needs: docker-images
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifests
+        env:
+          DOCKERHUB_WORKSPACE: ${{ secrets.DOCKERHUB_WORKSPACE }}
+          SERVER_IMAGE_REPO: 'server'
+          UI_IMAGE_REPO: 'ui'
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Server manifests
+          docker manifest create "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-amd64" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-arm64"
+          docker manifest push "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest"
+
+          docker manifest create "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}-amd64" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}-arm64"
+          docker manifest push "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}"
+
+          # UI manifests
+          docker manifest create "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest-amd64" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest-arm64"
+          docker manifest push "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest"
+
+          docker manifest create "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}-amd64" \
+            --amend "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}-arm64"
+          docker manifest push "registry-1.docker.io/${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}"
 
   python-packages:
     runs-on: ubuntu-latest
@@ -57,7 +112,7 @@ jobs:
 
   helm:
     runs-on: ubuntu-latest
-    needs: docker-images
+    needs: manifests
     env:
       DOCKERHUB_WORKSPACE: ${{ secrets.DOCKERHUB_WORKSPACE }}
     steps:

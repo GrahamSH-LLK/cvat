@@ -573,10 +573,24 @@ jobs:
           name: cvat_ui
           path: /tmp/cvat_ui/
 
+      - name: Download CVAT server images (arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: cvat_server_arm64
+          path: /tmp/cvat_server_arm64/
+
+      - name: Download CVAT UI images (arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: cvat_ui_arm64
+          path: /tmp/cvat_ui_arm64/
+
       - name: Load Docker images
         run: |
           docker load --input /tmp/cvat_server/image.tar
           docker load --input /tmp/cvat_ui/image.tar
+          docker load --input /tmp/cvat_server_arm64/image.tar
+          docker load --input /tmp/cvat_ui_arm64/image.tar
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -584,16 +598,35 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push to Docker Hub
+      - name: Push to Docker Hub (multi-arch)
         env:
           SERVER_IMAGE_REPO: ${{ secrets.DOCKERHUB_WORKSPACE }}/server
           UI_IMAGE_REPO: ${{ secrets.DOCKERHUB_WORKSPACE }}/ui
         run: |
-          docker tag "cvat/server:${CVAT_VERSION}" "${SERVER_IMAGE_REPO}:dev"
-          docker push "${SERVER_IMAGE_REPO}:dev"
+          # Tag per-arch images
+          docker tag "cvat/server:${CVAT_VERSION}" "${SERVER_IMAGE_REPO}:dev-amd64"
+          docker tag "cvat/server:${CVAT_VERSION}-arm64" "${SERVER_IMAGE_REPO}:dev-arm64"
 
-          docker tag "cvat/ui:${CVAT_VERSION}" "${UI_IMAGE_REPO}:dev"
-          docker push "${UI_IMAGE_REPO}:dev"
+          docker tag "cvat/ui:${CVAT_VERSION}" "${UI_IMAGE_REPO}:dev-amd64"
+          docker tag "cvat/ui:${CVAT_VERSION}-arm64" "${UI_IMAGE_REPO}:dev-arm64"
+
+          # Push per-arch tags
+          docker push "${SERVER_IMAGE_REPO}:dev-amd64"
+          docker push "${SERVER_IMAGE_REPO}:dev-arm64"
+
+          docker push "${UI_IMAGE_REPO}:dev-amd64"
+          docker push "${UI_IMAGE_REPO}:dev-arm64"
+
+          # Create and push multi-arch manifests
+          docker manifest create "${SERVER_IMAGE_REPO}:dev" \
+            --amend "${SERVER_IMAGE_REPO}:dev-amd64" \
+            --amend "${SERVER_IMAGE_REPO}:dev-arm64"
+          docker manifest push "${SERVER_IMAGE_REPO}:dev"
+
+          docker manifest create "${UI_IMAGE_REPO}:dev" \
+            --amend "${UI_IMAGE_REPO}:dev-amd64" \
+            --amend "${UI_IMAGE_REPO}:dev-arm64"
+          docker manifest push "${UI_IMAGE_REPO}:dev"
 
   generate_report:
     name: Generate Allure Report and Upload to S3
