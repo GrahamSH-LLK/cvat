@@ -35,12 +35,12 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
           ARCH: ${{ matrix.arch }}
         run: |
-          # Tag per-arch images (assuming local images are tagged as ${DOCKERHUB_WORKSPACE}/<repo>:latest)
-          docker tag "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-${ARCH}"
-          docker tag "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}-${ARCH}"
+          # Tag per-arch images from local cvat/*:latest to registry with workspace prefix
+          docker tag "cvat/server:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-${ARCH}"
+          docker tag "cvat/server:latest" "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:${TAG}-${ARCH}"
 
-          docker tag "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest-${ARCH}"
-          docker tag "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}-${ARCH}"
+          docker tag "cvat/ui:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:latest-${ARCH}"
+          docker tag "cvat/ui:latest" "${DOCKERHUB_WORKSPACE}/${UI_IMAGE_REPO}:${TAG}-${ARCH}"
 
           # Push per-arch tags
           docker push "${DOCKERHUB_WORKSPACE}/${SERVER_IMAGE_REPO}:latest-${ARCH}"
