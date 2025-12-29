@@ -21,19 +21,19 @@ jobs:
         id: server-cache-action
         with:
           path: /tmp/cvat_cache_server
-          key: ${{ runner.os }}-build-server-${{ github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-build-server-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-build-server-${{ needs.get-sha.outputs.sha }}
-            ${{ runner.os }}-build-server-
+            ${{ runner.os }}-${{ runner.arch }}-build-server-${{ needs.get-sha.outputs.sha }}
+            ${{ runner.os }}-${{ runner.arch }}-build-server-
 
       - uses: actions/cache@v4
         id: ui-cache-action
         with:
           path: /tmp/cvat_cache_ui
-          key: ${{ runner.os }}-build-ui-${{ github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-build-ui-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-build-ui-${{ needs.get-sha.outputs.sha }}
-            ${{ runner.os }}-build-ui-
+            ${{ runner.os }}-${{ runner.arch }}-build-ui-${{ needs.get-sha.outputs.sha }}
+            ${{ runner.os }}-${{ runner.arch }}-build-ui-
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
